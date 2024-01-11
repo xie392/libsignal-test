@@ -6,9 +6,45 @@ import {
     PreKeyType,
     SessionCipher,
     MessageType,
+    DeviceType
   } from "@privacyresearch/libsignal-protocol-typescript";
 import {SignalProtocolStore} from "./storage-type";
 import DB from "./db"
+
+export interface PublicDirectoryEntry {
+  identityPubKey: ArrayBuffer
+  signedPreKey: SignedPublicPreKeyType
+  oneTimePreKey?: ArrayBuffer
+}
+
+interface FullDirectoryEntry {
+  registrationId: number
+  identityPubKey: ArrayBuffer
+  signedPreKey: SignedPublicPreKeyType
+  oneTimePreKeys: PreKeyType[]
+}
+
+export class SignalDirectory{
+  private _data: {[address: string]: FullDirectoryEntry} = {}
+
+  storeKeyBundle(address: string, bundle: FullDirectoryEntry) : void {
+      this._data[address] = bundle
+  }
+
+  addOneTimePreKeys(address: string, keys: PreKeyType[]): void {
+      this._data[address].oneTimePreKeys.unshift(...keys) 
+  }
+
+  getPreKeyBundle(address: string): DeviceType | undefined {
+      const bundle = this._data[address]
+      if(!bundle) {
+          return undefined
+      }
+      const oneTimePreKey = bundle.oneTimePreKeys.pop()
+      const { identityPubKey, signedPreKey, registrationId } = bundle
+      return { identityKey: identityPubKey, signedPreKey, preKey: oneTimePreKey, registrationId }
+  }
+}
 
 /**
  * @description
@@ -18,6 +54,7 @@ import DB from "./db"
 export default class SignalProtocol {
 
     db: typeof DB;
+
 
     constructor() {
       this.db = DB;
@@ -38,6 +75,14 @@ export default class SignalProtocol {
      */
     createStore(): SignalProtocolStore {
         return new SignalProtocolStore();
+    }
+
+    /**
+     * 
+     * @returns 
+     */
+    createDirectory(): SignalDirectory {
+        return new SignalDirectory()
     }
 
     /**
@@ -99,7 +144,9 @@ export default class SignalProtocol {
           keyId: preKey.keyId,
           publicKey: preKey.keyPair.pubKey,
         };
-    
+        
+        const directory = this.createDirectory()
+
         // 将密钥存储到目录
         directory.storeKeyBundle(name, {
           registrationId,
@@ -108,6 +155,14 @@ export default class SignalProtocol {
           oneTimePreKeys: [publicPreKey],
         });
     
-      };
+      }
+
+      /**
+       * 重新生成公钥
+       */
+      async regeneratePublicKeys(privKey: ArrayBuffer) {
+        // 加载本地存储的公钥
+        // const identityKeyPair = await KeyHelper.generateIdentityKeyPairFromSeed(privKey);
+      }
 
 }
