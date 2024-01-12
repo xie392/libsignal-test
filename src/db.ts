@@ -26,14 +26,19 @@ WebDB.version(WEBDB_VERSION).stores({
 		send_state, 
 		is_read,
 	`,
-	keypairs: `
+	keypairs:`
 		++id,
 		sender_id,
-		sender_registrationId,
+		sender_name,
+		sender_device_id,
+		signed_pre_key,
+		sender_identity_key,
+		sender_pre_key_id,
 		sender_public_key,
-		sender_identifier,
-		sender_device_name,
-	`,
+		sender_registration_id,
+		sender_signed_pre_key,
+		sender_signature
+	`
 })
 
 export default WebDB

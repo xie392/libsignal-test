@@ -21,11 +21,14 @@ async function createIdentity(name: string, identifier: string, deviceId: number
   // 生成一个注册id
   const registrationId = KeyHelper.generateRegistrationId()
 
-  // 存储注册id
+  // 存储注册id 1129
   store.put(`registrationID`, registrationId)
 
   // 生成身份密钥对
   const identityKeyPair = await KeyHelper.generateIdentityKeyPair()
+
+  console.log("identityKeyPair",identityKeyPair)
+  
 
   // 存储身份密钥
   store.put(`identityKey`, identityKeyPair)
@@ -104,10 +107,38 @@ export default function App() {
     console.log("默认生成用户2:", identity2)
   }
 
+  const arrayBufferToString = (buffer: ArrayBuffer) => {
+    const decoder = new TextDecoder()
+    const text = decoder.decode(buffer)
+    return text
+  }
+
   const cretaeSession = async (user1: any, user2: any) => {
     // 生成会话 接收放的 name
     const bundle = directory.getPreKeyBundle(user2.address.name)
-    // console.log("bundle", bundle);
+    console.log("bundle", bundle);
+
+    // const obj = cloneDeep(bundle)
+    // console.log("obj",obj);
+    // for (const key in bundle) {
+    //   // obj[key] = bundle[key]
+    //   if(typeof bundle[key] === 'object') {
+    //     for (const k in bundle[key]) {
+    //       // 如果是 ArrayBuffer
+    //       if (bundle[key][k] instanceof ArrayBuffer) {
+    //         // 把 ArrayBuffer 转成字符串
+    //         obj[key][k] = btoa(String.fromCharCode.apply(null, new Uint8Array(bundle[key][k])))
+    //       }
+    //     }
+    //   } 
+
+    //   if (bundle[key] instanceof ArrayBuffer) {
+    //     // 把 ArrayBuffer 转成字符串
+    //     obj[key] = btoa(String.fromCharCode.apply(null, new Uint8Array(bundle[key])))
+    //   }
+    // }
+    // console.log("obj",obj);
+    
 
     const address = new SignalProtocolAddress(user2.address.name, user2.address.deviceId)
     // const recipientAddress = user2.address;
