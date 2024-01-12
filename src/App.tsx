@@ -99,6 +99,7 @@ function getNewMessageID(): number {
 const adalheidAddress = new SignalProtocolAddress("adalheid", 1);
 const brunhildeAddress = new SignalProtocolAddress("brünhild", 1);
 
+
 function App() {
   console.log("adalheidAddress",adalheidAddress);
   
@@ -340,22 +341,27 @@ function App() {
   };
 
   const startSessionWithAdalheid = async () => {
-    // get Adalheid's key bundle
+    // 发送：brünhild
+    // 接收：adalheid
+    // 获得阿达尔海德的钥匙包
     const adalheidBundle = directory.getPreKeyBundle("adalheid");
     console.log({ adalheidBundle });
 
     const recipientAddress = adalheidAddress;
 
-    // Instantiate a SessionBuilder for a remote recipientId + deviceId tuple.
+    // 为远程recipientId + deviceId元组实例化SessionBuilder。
     const sessionBuilder = new SessionBuilder(brunhildeStore, recipientAddress);
 
-    // Process a prekey fetched from the server. Returns a promise that resolves
-    // once a session is created and saved in the store, or rejects if the
-    // identityKey differs from a previously seen identity for this address.
+    console.log("sessionBuilder",sessionBuilder);
+    
+
+    // 处理从服务器获取的预密钥。返回一个解决的承诺
+  // 一旦会话被创建并保存在商店中，或者如果会话被拒绝，
+  // IdentityKey 与该地址之前看到的身份不同。
     console.log("brünhild processing prekey");
     await sessionBuilder.processPreKey(adalheidBundle!);
 
-    // Now we can send an encrypted message
+    // 现在我们可以发送加密消息
     const brunhildeSessionCipher = new SessionCipher(
       brunhildeStore,
       recipientAddress

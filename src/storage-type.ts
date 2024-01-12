@@ -64,7 +64,6 @@ export class SignalProtocolStore implements StorageType {
     }
 
 
-
     /**
      * 获取
      * @param key 

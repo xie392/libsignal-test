@@ -36,3 +36,31 @@
     transform: rotate(360deg);
   }
 }
+
+.app {
+  max-width: 1200px;
+  margin:  0 auto;
+  padding: 1rem;
+  box-sizing: border-box;
+}
+
+.app .app-text {
+  font-size: 14px;
+}
+
+.app .app-conatiner {
+  display: flex;
+  column-gap: 2rem;
+}
+
+.app .app-conatiner .app-item {
+  flex: 1;
+}
+
+.app-text__right {
+  text-align: right;
+}
+
+.app-text__left {
+  text-align: left;
+}

@@ -9,7 +9,7 @@ import {
     DeviceType
   } from "@privacyresearch/libsignal-protocol-typescript";
 import {SignalProtocolStore} from "./storage-type";
-import DB from "./db"
+// import DB from "./db"
 
 export interface PublicDirectoryEntry {
   identityPubKey: ArrayBuffer
@@ -53,11 +53,14 @@ export class SignalDirectory{
  */
 export default class SignalProtocol {
 
-    db: typeof DB;
-
+    private store: SignalProtocolStore;
+    private address: SignalProtocolAddress;
+    private directory: SignalDirectory;
 
     constructor() {
-      this.db = DB;
+      this.store = this.createStore()
+      // this.address = this.createAddress(identifier, deviceId);
+      this.directory = this.createDirectory()
     }
 
     /**
@@ -88,11 +91,12 @@ export default class SignalProtocol {
     /**
      * 创建注册id
      */
-    async createRegistrationId(name: string) {
+    async createRegistrationId(name: string, identifier: string, deviceName: number) {
+        const address = this.createAddress(identifier,deviceName);
+
         // 生成一个注册id
         const registrationId = KeyHelper.generateRegistrationId();
       
-    
         // TODO：把生成的 id 存储到本地
         // @ts-ignore
         // DB!.users.put({ user_id: 'test1', user_registrationId: registrationId })
@@ -103,13 +107,16 @@ export default class SignalProtocol {
         //   console.error('联系人插入失败:', error?.message)
         // })
         // this.db.keypairs.where("a").above(100).modify({ field1: "value1" });
+
         // storeSomewhereSafe(store)(`registrationID`, registrationId);
+        this.store.put(`registrationID`, registrationId);
     
         // 生成身份密钥对
         const identityKeyPair = await KeyHelper.generateIdentityKeyPair();
     
         // TODO：把生成的身份密钥对存储到本地
         // storeSomewhereSafe(store)("identityKey", identityKeyPair);
+        this.store.put(`identityKey`, identityKeyPair);
     
         // 生成一个预共享密钥
         const baseKeyId = Math.floor(10000 * Math.random());
@@ -119,6 +126,7 @@ export default class SignalProtocol {
     
         // 存储预密钥
         // store.storePreKey(`${baseKeyId}`, preKey.keyPair);
+        this.store.storePreKey(`${baseKeyId}`, preKey.keyPair);
     
         // 随机生成一个签名密钥 id
         const signedPreKeyId = Math.floor(10000 * Math.random());
@@ -131,6 +139,7 @@ export default class SignalProtocol {
     
         // 存储签名密钥
         // store.storeSignedPreKey(signedPreKeyId, signedPreKey.keyPair);
+        this.store.storeSignedPreKey(signedPreKeyId, signedPreKey.keyPair);
     
         // 存储公钥
         const publicSignedPreKey: SignedPublicPreKeyType = {
@@ -154,15 +163,46 @@ export default class SignalProtocol {
           signedPreKey: publicSignedPreKey,
           oneTimePreKeys: [publicPreKey],
         });
-    
+
+        return {
+          store:this.store,
+          address
+        }
       }
 
       /**
-       * 重新生成公钥
+       * TODO: 重新生成公钥
        */
       async regeneratePublicKeys(privKey: ArrayBuffer) {
         // 加载本地存储的公钥
         // const identityKeyPair = await KeyHelper.generateIdentityKeyPairFromSeed(privKey);
       }
 
-}
+      /**
+       * 生成身份
+       * @returns {Promise<IdentityType>}
+       */
+      async generateIdentity(name: string, identifier: string, deviceName: number) {
+        return await this.createRegistrationId(name, identifier, deviceName);
+      }
+
+      /**
+       * 新建会话
+       */
+      async createSession(name: string, identifier: string, deviceName: number) {
+        const address = this.createAddress(identifier,deviceName);
+        const bundle = await this.store.loadSession(name);
+        if(!bundle) {
+          throw new Error(`未找到联系人 ${name} 的会话信息`)
+        }
+        const { identityKey, signedPreKey, preKey, registrationId } = bundle;
+        return new SignalProtocolSession(address, identityKey, signedPreKey, preKey, registrationId);
+      }
+  }
+    
+/**
+ * 异步函数，用于创建身份信息
+ * 
+ * @returns {Promise<void>} 返回Promise对象，该对象在异步操作完成后解析为undefined
+ */
+export async function createIdentity() {}
