@@ -100,8 +100,10 @@ export default function App() {
     // 生成注册ID和密钥对
     const identity1 = await createIdentity('test', 'test', 1, directory)
     const identity2 = await createIdentity('test2', 'test2', 2, directory)
+
     setInfo(identity1)
     setInfo2(identity2)
+    
 
     console.log("默认生成用户1:", identity1)
     console.log("默认生成用户2:", identity2)
@@ -232,6 +234,9 @@ export default function App() {
     cretaeSession(info, info2)
     // 现在我们可以发送加密消息
     const sessionCipher = new SessionCipher(info.store, info2.address)
+
+    console.log("sessionCipher",info.store,sessionCipher);
+    
 
     const ciphertext = await sendMessage(msg, sessionCipher)
 

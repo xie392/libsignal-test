@@ -1,550 +1,213 @@
-import React, { useState, useEffect } from "react";
-import { makeStyles } from "@material-ui/core/styles";
+import { useEffect, useState } from 'react'
+import './App.css'
+import { Button, TextField } from "@material-ui/core"
 
-import {
-  KeyHelper,
-  SignedPublicPreKeyType,
-  SignalProtocolAddress,
-  SessionBuilder,
-  PreKeyType,
-  SessionCipher,
-  MessageType,
-} from "@privacyresearch/libsignal-protocol-typescript";
+import Signal from "./protocol"
+import { SessionCipher, SignalProtocolAddress } from '@privacyresearch/libsignal-protocol-typescript'
 
-import "./App.css";
-import {
-  Paper,
-  Grid,
-  Typography,
-  Button,
-  Chip,
-  TextField,
-} from "@material-ui/core";
-import SendIcon from "@material-ui/icons/Send";
+import { cloneDeep } from 'lodash-es'
+import MarkdownPreview from '@uiw/react-markdown-preview'
+import processMarkdown from './process.md?raw'
 
-import { SignalProtocolStore } from "./storage-type";
-import { SignalDirectory } from "./signal-directory";
-
-// import DB from "./db";
-
-const useStyles = makeStyles((theme) => ({
-  root: {
-    flexGrow: 1,
-  },
-  paper: {
-    padding: theme.spacing(2),
-    margin: "auto",
-    maxWidth: "90%",
-  },
-  image: {
-    width: 128,
-    height: 128,
-  },
-  container: {
-    padding: theme.spacing(2),
-  },
-  buttonitem: {
-    margin: 10,
-    padding: 10,
-  },
-  message: {
-    padding: 10,
-    backgroundColor: "lightsteelblue",
-    margin: 10,
-    maxWidth: "90%",
-    textAlign: "left",
-  },
-  outgoingmessage: {
-    padding: 10,
-    backgroundColor: "linen",
-    margin: 10,
-    maxWidth: "90%",
-  },
-  img: {
-    margin: "auto",
-    display: "block",
-    maxWidth: "100%",
-    maxHeight: "100%",
-  },
-  story: {
-    margin: "auto",
-    display: "block",
-    textAlign: "left",
-    fontSize: "10pt",
-  },
-}));
-
-interface ChatMessage {
-  id: number;
-  to: string;
-  from: string;
-  message: MessageType;
-  delivered: boolean;
-}
-interface ProcessedChatMessage {
-  id: number;
-  to: string;
-  from: string;
-  messageText: string;
-}
-let msgID = 0;
-
-function getNewMessageID(): number {
-  return msgID++;
-}
-
-// define addresses
-
-// 创建地址
-const adalheidAddress = new SignalProtocolAddress("adalheid", 1);
-const brunhildeAddress = new SignalProtocolAddress("brünhild", 1);
-
+const DESKTOP1 = 'test1'
+const DESKTOP2 = 'test2'
 
 function App() {
-  console.log("adalheidAddress",adalheidAddress);
-  
-  // 仓库
-  const [adiStore] = useState(new SignalProtocolStore());
-  const [brunhildeStore] = useState(new SignalProtocolStore());
+  // 创建实例 
+  const [signal1] = useState(new Signal())
+  const [signal2] = useState(new Signal())
 
-  // 
-  const [aHasIdentity, setAHasIdentity] = useState(false);
-  const [bHasIdentity, setBHasIdentity] = useState(false);
+  // 身份信息
+  const [desktop1, setDesktop1] = useState<any>({})
+  const [desktop2, setDesktop2] = useState<any>({})
 
-  // 目录
-  const [directory] = useState(new SignalDirectory());
+  // 地址
+  const [address1] = useState(new SignalProtocolAddress(DESKTOP1, 1))
+  const [address2] = useState(new SignalProtocolAddress(DESKTOP2, 2))
 
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
-  
-  const [processedMessages, setProcessedMessages] = useState<
-    ProcessedChatMessage[]
-  >([]);
+  // 会话 session
+  const [sessionCipher1] = useState<SessionCipher>(new SessionCipher(signal1.store, address2))
+  const [sessionCipher2] = useState<SessionCipher>(new SessionCipher(signal2.store, address2))
 
-  const [hasSession, setHasSession] = useState(false);
+  // 消息
+  const [msg1, setMsg1] = useState<string>('')
+  const [msg2, setMsg2] = useState<string>('')
 
-  const [adalheidTyping, setAdalheidTyping] = useState("");
-  const [brunhildeTyping, setBrunhildeTyping] = useState("");
+  // 加密的消息
+  const [message, setMessage] = useState<any>([])
+  // 解密后的消息
+  const [chats, setChats] = useState<any>([])
 
-  const [processing, setProcessing] = useState(false);
+  // 初始化
+  async function init() {
+    const desktop1 = await signal1.ceeateIdentity(DESKTOP1)
+    const desktop2 = await signal2.ceeateIdentity(DESKTOP2)
 
-  const classes = useStyles();
+    setDesktop1(desktop1)
+    setDesktop2(desktop2)
 
-  // 发送消息
-  const sendMessage = (to: string, from: string, message: MessageType) => {
-    const msg = { to, from, message, delivered: false, id: getNewMessageID() };
-    console.log("发送消息：",msg);
-    
-    setMessages([...messages, msg]);
-  };
+    console.log("%c第一步:", "color:#f36;font-size:24px;")
+    console.info("为客户端1生成身份：", desktop1)
+    console.info("为客户端2生成身份：", desktop2)
 
+
+    //* 生成个人信息后，把 bundle 暴露出
+    const bundle1Buffer = signal1.directory.getPreKeyBundle(DESKTOP1)
+    const bundle2Buffer = signal2.directory.getPreKeyBundle(DESKTOP2)
+
+    // *建立会话
+    await signal1.cretaeSession(signal1.store, address2, bundle2Buffer!)
+    await signal2.cretaeSession(signal2.store, address1, bundle1Buffer!)
+
+    console.log("%c第二步:", "color:#f36;font-size:24px;")
+    console.info("与客户端2建立会话")
+    console.info("与客户端1建立会话")
+  }
+
+  useEffect(() => { init() }, [])
+
+  const sendMessage1 = async () => {
+
+    const encrypted = await signal1.encrypt(msg1, sessionCipher1!)
+
+    console.log("客户端2发送消息：", encrypted)
+
+    const res = {
+      msg: encrypted,
+      time: new Date().toLocaleString(),
+      type: 'send'
+    }
+
+    setMessage([...message, res])
+    setMsg1('')
+
+    const chatList = cloneDeep(chats)
+    chatList.push(res)
+    setChats(chatList)
+
+    // 客户端2解密
+    // if (encrypted) {
+    //   const decrypted = await signal2.decrypt(encrypted, sessionCipher2!)
+    //   console.log("客户端2解密", decrypted)
+    // }
+  }
+
+  const sendMessage2 = async () => {
+    const encrypted = await signal2.encrypt(msg2, sessionCipher2!)
+
+    console.log("客户端1发送消息：", encrypted)
+
+    const res = {
+      msg: encrypted,
+      time: new Date().toLocaleString(),
+      type: 'receive'
+    }
+
+    setMessage([...message, res])
+    setMsg2('')
+
+    const chatList = cloneDeep(chats)
+    chatList.push(res)
+    setChats(chatList)
+
+    // 客户端1解密
+    // if (encrypted) {
+    //   const decrypted = await signal2.decrypt(encrypted, sessionCipher1!)
+    //   console.log("客户端1解密", decrypted)
+    // }
+  }
+
+  // 解密
   useEffect(() => {
-    if (!messages.find((m) => !m.delivered) || processing) {
-      return;
-    }
+    const decrypt = async () => {
+      const newChats = cloneDeep(chats)
+      const lastChats = newChats.at(-1)
 
-    // 获取收件人的接收会话密码
-    const getReceivingSessionCipherForRecipient = (to: string) => {
-      // send from Brünhild to Adalheid so use his store
-      const store = to === "brünhild" ? brunhildeStore : adiStore;
-      const address = to === "brünhild" ? adalheidAddress : brunhildeAddress;
-      return new SessionCipher(store, address);
-    };
-
-    const doProcessing = async () => {
-      while (messages.length > 0) {
-        const nextMsg = messages.shift();
-        if (!nextMsg) {
-          continue;
-        }
-        const cipher = getReceivingSessionCipherForRecipient(nextMsg.to);
-        const processed = await readMessage(nextMsg, cipher);
-        processedMessages.push(processed);
+      if (lastChats.type === 'send') {
+        lastChats.msg.body = await signal1.decrypt(lastChats.msg, sessionCipher2!)
+      } else {
+        lastChats.msg.body = await signal2.decrypt(lastChats.msg, sessionCipher1!)
       }
-      setMessages([...messages]);
-      setProcessedMessages([...processedMessages]);
-    };
-    setProcessing(true);
-    doProcessing().then(() => {
-      setProcessing(false);
-    });
-  }, [adiStore, brunhildeStore, messages, processedMessages, processing]);
-
-  // 解析消息
-  const readMessage = async (msg: ChatMessage, cipher: SessionCipher) => {
-    let plaintext: ArrayBuffer = new Uint8Array().buffer;
-    if (msg.message.type === 3) {
-      console.log({ msg });
-      plaintext = await cipher.decryptPreKeyWhisperMessage(
-        msg.message.body!,
-        "binary"
-      );
-      setHasSession(true);
-    } else if (msg.message.type === 1) {
-      plaintext = await cipher.decryptWhisperMessage(
-        msg.message.body!,
-        "binary"
-      );
+      setChats(newChats)
     }
-    const stringPlaintext = new TextDecoder().decode(new Uint8Array(plaintext));
-
-    console.log("解析前",msg.message.body!);
-    console.log("解析后",stringPlaintext);
-
-    const { id, to, from } = msg;
-    return { id, to, from, messageText: stringPlaintext };
-  };
-
-  const storeSomewhereSafe = (store: SignalProtocolStore) => (
-    key: string,
-    value: any
-  ) => {
-    store.put(key, value);
-  };
-
-  /**
-   * 生成一个 id
-   * @param name    名称 
-   * @param store   仓库
-   */
-  const createID = async (name: string, store: SignalProtocolStore) => {
-    // 生成一个注册id
-    const registrationId = KeyHelper.generateRegistrationId();
-
-    console.log("注册id",registrationId);
-    
-
-    // TODO：把生成的 id 存储到本地
-    // @ts-ignore
-    // DB!.users.put({ user_id: 'test1', user_registrationId: registrationId })
-    // .then(() => {
-    //   console.log('联系人插入成功！')
-    // })
-    // .catch((error: { message: string; }) => {
-    //   console.error('联系人插入失败:', error?.message)
-    // })
-    storeSomewhereSafe(store)(`registrationID`, registrationId);
-
-    // 生成身份密钥对
-    const identityKeyPair = await KeyHelper.generateIdentityKeyPair();
-
-    console.log("生成身份密钥对",identityKeyPair);
-
-
-    // TODO：把生成的身份密钥对存储到本地
-    storeSomewhereSafe(store)("identityKey", identityKeyPair);
-
-    // 生成一个预共享密钥
-    const baseKeyId = Math.floor(100000000000 * Math.random());
-
-    // 存储预密钥
-    const preKey = await KeyHelper.generatePreKey(baseKeyId);
-    console.log("生成一个预共享密钥",preKey);
-
-    // 存储预密钥
-    store.storePreKey(`${baseKeyId}`, preKey.keyPair);
-
-    // 随机生成一个签名密钥 id
-    const signedPreKeyId = Math.floor(10000 * Math.random());
-
-    // 生成签名密钥
-    const signedPreKey = await KeyHelper.generateSignedPreKey(
-      identityKeyPair,
-      signedPreKeyId
-    );
-    console.log("生成签名密钥",signedPreKey);
-
-    // 存储签名密钥
-    store.storeSignedPreKey(signedPreKeyId, signedPreKey.keyPair);
-
-    // 存储公钥
-    const publicSignedPreKey: SignedPublicPreKeyType = {
-      keyId: signedPreKeyId,
-      publicKey: signedPreKey.keyPair.pubKey,
-      signature: signedPreKey.signature,
-    };
-
-
-    // 现在我们将其注册到服务器，以便所有用户都可以看到它们
-    const publicPreKey: PreKeyType = {
-      keyId: preKey.keyId,
-      publicKey: preKey.keyPair.pubKey,
-    };
-
-    // 将密钥存储到目录
-    directory.storeKeyBundle(name, {
-      registrationId,
-      identityPubKey: identityKeyPair.pubKey,
-      signedPreKey: publicSignedPreKey,
-      oneTimePreKeys: [publicPreKey],
-    });
-
-    console.log("将密钥存储到目录",directory);
-    
-
-  };
-
-
-  // 给用户生成身份密钥对
-  const createAdalheidIdentity = async () => {
-    await createID("adalheid", adiStore);
-    console.log({ adiStore });
-    setAHasIdentity(true);
-  };
-  const createBrunhildeIdentity = async () => {
-    await createID("brünhild", brunhildeStore);
-    setBHasIdentity(true);
-  };
-
-
-  const starterMessageBytes = Uint8Array.from([
-    0xce,
-    0x93,
-    0xce,
-    0xb5,
-    0xce,
-    0xb9,
-    0xce,
-    0xac,
-    0x20,
-    0xcf,
-    0x83,
-    0xce,
-    0xbf,
-    0xcf,
-    0x85,
-  ]);
-
-  // 创建会话
-  const startSessionWithBrunhilde = async () => {
-    // get Brünhild' key bundle
-    const brunhildeBundle = directory.getPreKeyBundle("brünhild");
-    console.log({ brunhildeBundle });
-
-    const recipientAddress = brunhildeAddress;
-
-    // Instantiate a SessionBuilder for a remote recipientId + deviceId tuple.
-    const sessionBuilder = new SessionBuilder(adiStore, recipientAddress);
-
-    // Process a prekey fetched from the server. Returns a promise that resolves
-    // once a session is created and saved in the store, or rejects if the
-    // identityKey differs from a previously seen identity for this address.
-    console.log("adalheid processing prekey");
-    await sessionBuilder.processPreKey(brunhildeBundle!);
-
-    // Now we can send an encrypted message
-    const adalheidSessionCipher = new SessionCipher(adiStore, recipientAddress);
-    const ciphertext = await adalheidSessionCipher.encrypt(
-      starterMessageBytes.buffer
-    );
-
-    sendMessage("brünhild", "adalheid", ciphertext);
-  };
-
-  const startSessionWithAdalheid = async () => {
-    // 发送：brünhild
-    // 接收：adalheid
-    // 获得阿达尔海德的钥匙包
-    const adalheidBundle = directory.getPreKeyBundle("adalheid");
-    console.log({ adalheidBundle });
-
-    const recipientAddress = adalheidAddress;
-
-    // 为远程recipientId + deviceId元组实例化SessionBuilder。
-    const sessionBuilder = new SessionBuilder(brunhildeStore, recipientAddress);
-
-    console.log("sessionBuilder",sessionBuilder);
-    
-
-    // 处理从服务器获取的预密钥。返回一个解决的承诺
-  // 一旦会话被创建并保存在商店中，或者如果会话被拒绝，
-  // IdentityKey 与该地址之前看到的身份不同。
-    console.log("brünhild processing prekey");
-    await sessionBuilder.processPreKey(adalheidBundle!);
-
-    // 现在我们可以发送加密消息
-    const brunhildeSessionCipher = new SessionCipher(
-      brunhildeStore,
-      recipientAddress
-    );
-    const ciphertext = await brunhildeSessionCipher.encrypt(
-      starterMessageBytes.buffer
-    );
-
-    sendMessage("adalheid", "brünhild", ciphertext);
-  };
-
-  const displayMessages = (sender: string) => {
-    return processedMessages.map((m) => (
-      <React.Fragment>
-        {m.from === sender ? <Grid xs={2} item /> : <div />}
-        <Grid xs={10} item key={m.id}>
-          <Paper
-            className={
-              m.from === sender ? classes.outgoingmessage : classes.message
-            }
-          >
-            <Typography variant="body1">{m.messageText}</Typography>
-          </Paper>
-        </Grid>
-        {m.from !== sender ? <Grid xs={2} item /> : <div />}
-      </React.Fragment>
-    ));
-  };
-
-  const getSessionCipherForRecipient = (to: string) => {
-    // send from Brünhild to adalheid so use his store
-    const store = to === "adalheid" ? brunhildeStore : adiStore;
-    const address = to === "adalheid" ? adalheidAddress : brunhildeAddress;
-    return new SessionCipher(store, address);
-  };
-
-  const encryptAndSendMessage = async (to: string, message: string) => {
-    const cipher = getSessionCipherForRecipient(to);
-    const from = to === "adalheid" ? "brünhild" : "adalheid";
-    const ciphertext = await cipher.encrypt(
-      new TextEncoder().encode(message).buffer
-    );
-    if (from === "adalheid") {
-      setAdalheidTyping("");
-    } else {
-      setBrunhildeTyping("");
+    if (chats.length > 0) {
+      decrypt()
     }
-    sendMessage(to, from, ciphertext);
-  };
-
-  const sendMessageControl = (to: string) => {
-    const value = to === "adalheid" ? brunhildeTyping : adalheidTyping;
-    const onTextChange =
-      to === "adalheid" ? setBrunhildeTyping : setAdalheidTyping;
-    return (
-      <Grid item xs={12} key="input">
-        <Paper className={classes.paper}>
-          <TextField
-            id="outlined-multiline-static"
-            label={`Message ${to}`}
-            multiline
-            value={value}
-            onChange={(event) => {
-              onTextChange(event.target.value);
-            }}
-            variant="outlined"
-          ></TextField>
-          <Button
-            onClick={() => encryptAndSendMessage(to, value)}
-            variant="contained"
-            className={classes.buttonitem}
-          >
-            {" "}
-            <SendIcon />
-          </Button>
-        </Paper>
-      </Grid>
-    );
-  };
+  }, [message])
 
   return (
-    <div className="App">
-      <Paper className={classes.paper}>
-        <Grid container spacing={2} className={classes.container}>
-          <Grid item xs={6}>
-            <Paper className={classes.paper}>
-              <Grid container key={"header"}>
-                <Grid item xs={11}>
-                  <Typography
-                    variant="h5"
-                    style={{ textAlign: "right", verticalAlign: "top" }}
-                    gutterBottom
-                  >
-                    客户端1
-                  </Typography>
-                </Grid>
-                <Grid item xs={12}>
-                  {aHasIdentity ? (
-                    <React.Fragment>
-                      <Chip
-                        label={`客户端1注册ID: ${adiStore.get(
-                          "registrationID",
-                          ""
-                        )}`}
-                      ></Chip>
-                      {hasSession || !(aHasIdentity && bHasIdentity) ? (
-                        <div />
-                      ) : (
-                        <Button
-                          className={classes.buttonitem}
-                          variant="contained"
-                          onClick={startSessionWithBrunhilde}
-                        >
-                          与客户端2开始会话
-                        </Button>
-                      )}
-                    </React.Fragment>
-                  ) : (
-                    <Button
-                      className={classes.buttonitem}
-                      variant="contained"
-                      onClick={createAdalheidIdentity}
-                    >
-                      为客户端1创建身份
-                    </Button>
-                  )}
-                </Grid>
-                {hasSession ? sendMessageControl("brünhild") : <div />}
-                {displayMessages("adalheid")}
-              </Grid>
-            </Paper>
-          </Grid>
+    <div className="app">
+      <div className="app-item">
 
-          {/* 客户端2 */}
-          <Grid item xs={6}>
-            <Paper className={classes.paper}>
-              <Grid container>
-                <Grid item xs={10}>
-                  <Typography
-                    variant="h5"
-                    style={{ textAlign: "left", verticalAlign: "top" }}
-                    gutterBottom
-                  >
-                   客户端2
-                  </Typography>
-                </Grid>
-                <Grid item xs={12}>
-                  {bHasIdentity ? (
-                    <React.Fragment>
-                      <Chip
-                        label={`客户端2注册ID: ${brunhildeStore.get(
-                          "registrationID",
-                          ""
-                        )}`}
-                      ></Chip>
-                      {hasSession || !(aHasIdentity && bHasIdentity) ? (
-                        <div />
-                      ) : (
-                        <Button
-                          className={classes.buttonitem}
-                          variant="contained"
-                          onClick={startSessionWithAdalheid}
-                        >
-                          与客户端1开始会话
-                        </Button>
-                      )}
-                    </React.Fragment>
-                  ) : (
-                    <Button
-                      variant="contained"
-                      onClick={createBrunhildeIdentity}
-                    >
-                      为客户端2创建身份
-                    </Button>
-                  )}
-                </Grid>
-                {hasSession ? sendMessageControl("adalheid") : <div />}
-                {displayMessages("brünhild")}
-              </Grid>
-            </Paper>
-          </Grid>
-        </Grid>
-      </Paper>
+        <div className="app-item-gird">
+          <h1>客户端1</h1>
+          <p>客户端1的注册ID：{desktop1?.base64?.registrationId}</p>
+          <div className='chat'>
+            <TextField
+              size="small"
+              label="消息"
+              variant="outlined"
+              style={{ flex: 1 }}
+              value={msg1}
+              onChange={(e) => setMsg1(e.target.value)}
+            />
+            <Button variant="contained" color="primary" onClick={sendMessage1}>发送消息</Button>
+          </div>
+
+          <br />
+
+          <h1>客户端2</h1>
+          <p>客户端2的注册ID：{desktop2?.base64?.registrationId}</p>
+          <div className='chat'>
+            <TextField
+              size="small"
+              label="消息"
+              variant="outlined"
+              style={{ flex: 1 }}
+              value={msg2}
+              onChange={(e) => setMsg2(e.target.value)}
+            />
+            <Button variant="contained" color="primary" onClick={sendMessage2}>发送消息</Button>
+          </div>
+        </div>
+
+        <div className="app-item-gird">
+          <MarkdownPreview source={processMarkdown} />
+        </div>
+      </div>
+
+      <div className="app-item">
+
+        <div className="app-item-gird">
+          {message.length !== 0 && (<h1>加密后的消息</h1>)}
+          {
+            message.map((item: any, index: number) => {
+              return (
+                <div key={index} className="app-text">
+                  <div className={item.type === 'send' ? 'app-text__right' : 'app-text__left'}>
+                    <p>{item.msg?.body}</p>
+                  </div>
+                </div>
+              )
+            })
+          }
+        </div>
+
+        <div className="app-item-gird">
+          {chats.length !== 0 && (<h1>解密后的消息</h1>)}
+          {
+            chats.map((item: any, index: number) => {
+              return (
+                <div key={index} className="app-text">
+                  <div className={item.type === 'send' ? 'app-text__right' : 'app-text__left'}>
+                    <p>{item.msg?.body}</p>
+                  </div>
+                </div>
+              )
+            })
+          }
+        </div>
+      </div>
     </div>
   );
 }

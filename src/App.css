@@ -1,4 +1,4 @@
-.App {
+/* .App {
   text-align: center;
 }
 
@@ -35,15 +35,15 @@
   to {
     transform: rotate(360deg);
   }
-}
+} */
 
-.app {
+/* .app {
   max-width: 1200px;
   margin:  0 auto;
   padding: 1rem;
   box-sizing: border-box;
-}
-
+} */
+/* 
 .app .app-text {
   font-size: 14px;
 }
@@ -63,4 +63,78 @@
 
 .app-text__left {
   text-align: left;
+} */
+
+.app {
+  display: flex;
+  min-height: 100vh;
+}
+
+.app .app-item {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid #ccc;
+  max-width: 50%;
+}
+
+.app .app-item:last-of-type {
+  border-right-color: transparent;
+}
+
+.app .app-item .app-item-gird {
+  flex: 1;
+  border-bottom: 1px solid #ccc;
+  padding: 1rem;
+  box-sizing: border-box;
+  overflow-y: auto;
+  max-height: 50vh;
+}
+
+.app .app-item .app-item-gird:last-of-type {
+  border-bottom-color: transparent;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  margin: 0;
+  padding: 0;
+  padding-bottom: 5px;
+  box-sizing: border-box;
+  border-bottom: 1px solid #ddd;
+  margin-bottom: 10px;
+}
+
+.app-text p {
+  margin: 0;
+  padding: 0.5rem 1rem;
+  box-sizing: border-box;
+}
+
+.app-text__right {
+  text-align: right;
+  box-sizing: border-box;
+  margin-bottom: 10px;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.app-text__right p {
+  background: orange;
+  max-width: 48%;
+  word-break: break-all;
+}
+
+.app-text__left {
+  text-align: left;
+  box-sizing: border-box;
+  margin-bottom: 10px;
+  display: flex;
+  justify-content: flex-start;
+}
+
+
+.app-text__left p {
+  background: greenyellow;
+  max-width: 48%;
+  word-break: break-all;
 }

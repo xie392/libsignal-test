@@ -7,202 +7,225 @@ import {
     SessionCipher,
     MessageType,
     DeviceType
-  } from "@privacyresearch/libsignal-protocol-typescript";
-import {SignalProtocolStore} from "./storage-type";
-// import DB from "./db"
+} from "@privacyresearch/libsignal-protocol-typescript"
+import { SignalProtocolStore } from "./storage-type"
+import { cloneDeep } from 'lodash-es'
+import { SignalDirectory } from "./signal-directory"
 
-export interface PublicDirectoryEntry {
-  identityPubKey: ArrayBuffer
-  signedPreKey: SignedPublicPreKeyType
-  oneTimePreKey?: ArrayBuffer
-}
+export default class Signal {
 
-interface FullDirectoryEntry {
-  registrationId: number
-  identityPubKey: ArrayBuffer
-  signedPreKey: SignedPublicPreKeyType
-  oneTimePreKeys: PreKeyType[]
-}
+    public directory: SignalDirectory = new SignalDirectory()
 
-export class SignalDirectory{
-  private _data: {[address: string]: FullDirectoryEntry} = {}
-
-  storeKeyBundle(address: string, bundle: FullDirectoryEntry) : void {
-      this._data[address] = bundle
-  }
-
-  addOneTimePreKeys(address: string, keys: PreKeyType[]): void {
-      this._data[address].oneTimePreKeys.unshift(...keys) 
-  }
-
-  getPreKeyBundle(address: string): DeviceType | undefined {
-      const bundle = this._data[address]
-      if(!bundle) {
-          return undefined
-      }
-      const oneTimePreKey = bundle.oneTimePreKeys.pop()
-      const { identityPubKey, signedPreKey, registrationId } = bundle
-      return { identityKey: identityPubKey, signedPreKey, preKey: oneTimePreKey, registrationId }
-  }
-}
-
-/**
- * @description
- * 此类是 libsignal-protocol-typescript 库的包装器。
- * 提供了更加用户友好的界面。
- */
-export default class SignalProtocol {
-
-    private store: SignalProtocolStore;
-    private address: SignalProtocolAddress;
-    private directory: SignalDirectory;
-
-    constructor() {
-      this.store = this.createStore()
-      // this.address = this.createAddress(identifier, deviceId);
-      this.directory = this.createDirectory()
-    }
+    // todo: 后续仓库可能需要修改，在添加时可以添加到 indexDB 中, 或者初始化的时候读取数据到仓库中
+    public store: SignalProtocolStore = new SignalProtocolStore()
 
     /**
-     * 创建地址
-     * @param identifier        用户名
-     * @param deviceName        设备名称
-     */
-    createAddress(identifier: string, deviceName: number): SignalProtocolAddress {
-        return new SignalProtocolAddress(identifier, deviceName);
-    }
-
-    /**
-     * 创建仓库
-     * @returns {SignalProtocolStore}
-     */
-    createStore(): SignalProtocolStore {
-        return new SignalProtocolStore();
-    }
-
-    /**
-     * 
+     * 创建身份
+     * @param {string} name     这个用于标识 directory 的 key 值，建议用用户 id 或者 一个唯一的值
      * @returns 
      */
-    createDirectory(): SignalDirectory {
-        return new SignalDirectory()
+    async ceeateIdentity(name: string) {
+        // 生成一个注册id
+        const registrationId = KeyHelper.generateRegistrationId()
+
+        // 生成身份密钥对
+        const identityKeyPair = await KeyHelper.generateIdentityKeyPair()
+
+        // 生成一个预共享密钥
+        const baseKeyId = Math.floor(10000 * Math.random())
+
+        // 存储预密钥
+        const preKey = await KeyHelper.generatePreKey(baseKeyId)
+
+        // 随机生成一个签名密钥 id
+        const signedPreKeyId = Math.floor(10000 * Math.random())
+
+        // 生成签名密钥
+        const signedPreKey = await KeyHelper.generateSignedPreKey(identityKeyPair, signedPreKeyId)
+
+        // 公共签名预密钥
+        const publicSignedPreKey: SignedPublicPreKeyType = {
+            keyId: signedPreKeyId,
+            publicKey: signedPreKey.keyPair.pubKey,
+            signature: signedPreKey.signature,
+        }
+
+        // 公共预密钥
+        const publicPreKey: PreKeyType = {
+            keyId: preKey.keyId,
+            publicKey: preKey.keyPair.pubKey,
+        }
+
+        // 存储注册id 1129
+        this.store.put(`registrationID`, registrationId)
+        // 存储身份密钥
+        this.store.put(`identityKey`, identityKeyPair)
+        // 存储预密钥
+        this.store.storePreKey(`${baseKeyId}`, preKey.keyPair)
+        // 存储签名密钥
+        this.store.storeSignedPreKey(`${signedPreKeyId}`, signedPreKey.keyPair);
+
+        this.directory.storeKeyBundle(name, {
+            registrationId,
+            identityPubKey: identityKeyPair.pubKey,
+            signedPreKey: publicSignedPreKey,
+            oneTimePreKeys: [publicPreKey],
+        })
+
+        const buffer = {
+            registrationId,
+            identityKeyPair,
+            publicPreKey,
+            publicSignedPreKey,
+            signedPreKeyId
+        }
+
+        return {
+            buffer,
+            base64: toBase64(buffer)
+        }
     }
 
     /**
-     * 创建注册id
+     * 创建会话
+     * @returns {Promise<IdentityType>}
      */
-    async createRegistrationId(name: string, identifier: string, deviceName: number) {
-        const address = this.createAddress(identifier,deviceName);
+    async cretaeSession(userStore: SignalProtocolStore, recipientAddress: SignalProtocolAddress, bundle: DeviceType) {
+        const sessionBuilder = new SessionBuilder(userStore, recipientAddress)
+        await sessionBuilder.processPreKey(bundle)
+    }
 
-        // 生成一个注册id
-        const registrationId = KeyHelper.generateRegistrationId();
-      
-        // TODO：把生成的 id 存储到本地
-        // @ts-ignore
-        // DB!.users.put({ user_id: 'test1', user_registrationId: registrationId })
-        // .then(() => {
-        //   console.log('联系人插入成功！')
-        // })
-        // .catch((error: { message: string; }) => {
-        //   console.error('联系人插入失败:', error?.message)
-        // })
-        // this.db.keypairs.where("a").above(100).modify({ field1: "value1" });
+    /**
+     * 加密消息
+     * @param {string} msg  要加密的消息
+     * @param {SessionCipher} cipher    
+     * @returns
+     */
+    async encrypt(msg: string, cipher: SessionCipher) {
+        // 把消息转为 ArrayBuffer
+        const buffer = new TextEncoder().encode(msg).buffer
 
-        // storeSomewhereSafe(store)(`registrationID`, registrationId);
-        this.store.put(`registrationID`, registrationId);
-    
-        // 生成身份密钥对
-        const identityKeyPair = await KeyHelper.generateIdentityKeyPair();
-    
-        // TODO：把生成的身份密钥对存储到本地
-        // storeSomewhereSafe(store)("identityKey", identityKeyPair);
-        this.store.put(`identityKey`, identityKeyPair);
-    
-        // 生成一个预共享密钥
-        const baseKeyId = Math.floor(10000 * Math.random());
-    
-        // 存储预密钥
-        const preKey = await KeyHelper.generatePreKey(baseKeyId);
-    
-        // 存储预密钥
-        // store.storePreKey(`${baseKeyId}`, preKey.keyPair);
-        this.store.storePreKey(`${baseKeyId}`, preKey.keyPair);
-    
-        // 随机生成一个签名密钥 id
-        const signedPreKeyId = Math.floor(10000 * Math.random());
-    
-        // 生成签名密钥
-        const signedPreKey = await KeyHelper.generateSignedPreKey(
-          identityKeyPair,
-          signedPreKeyId
-        );
-    
-        // 存储签名密钥
-        // store.storeSignedPreKey(signedPreKeyId, signedPreKey.keyPair);
-        this.store.storeSignedPreKey(signedPreKeyId, signedPreKey.keyPair);
-    
-        // 存储公钥
-        const publicSignedPreKey: SignedPublicPreKeyType = {
-          keyId: signedPreKeyId,
-          publicKey: signedPreKey.keyPair.pubKey,
-          signature: signedPreKey.signature,
-        };
-    
-        // 现在我们将其注册到服务器，以便所有用户都可以看到它们
-        const publicPreKey: PreKeyType = {
-          keyId: preKey.keyId,
-          publicKey: preKey.keyPair.pubKey,
-        };
-        
-        const directory = this.createDirectory()
+        // 加密
+        const ciphertext = await cipher.encrypt(buffer)
 
-        // 将密钥存储到目录
-        directory.storeKeyBundle(name, {
-          registrationId,
-          identityPubKey: identityKeyPair.pubKey,
-          signedPreKey: publicSignedPreKey,
-          oneTimePreKeys: [publicPreKey],
-        });
-
-        return {
-          store:this.store,
-          address
+        const result = {
+            ...ciphertext,
+            // 把消息转为 base64
+            body: stringToBase64(ciphertext.body!)
         }
-      }
 
-      /**
-       * TODO: 重新生成公钥
-       */
-      async regeneratePublicKeys(privKey: ArrayBuffer) {
-        // 加载本地存储的公钥
-        // const identityKeyPair = await KeyHelper.generateIdentityKeyPairFromSeed(privKey);
-      }
+        return result
+    }
 
-      /**
-       * 生成身份
-       * @returns {Promise<IdentityType>}
-       */
-      async generateIdentity(name: string, identifier: string, deviceName: number) {
-        return await this.createRegistrationId(name, identifier, deviceName);
-      }
+    /**
+     * 解密消息
+     * @param {MessageType} msg  要解密的消息
+     * @param {SessionCipher} cipher  
+     * @returns {SessionCipher}
+     */
+    async decrypt(msg: MessageType, cipher: SessionCipher) {
+        let plaintext: ArrayBuffer = new Uint8Array().buffer
 
-      /**
-       * 新建会话
-       */
-      async createSession(name: string, identifier: string, deviceName: number) {
-        const address = this.createAddress(identifier,deviceName);
-        const bundle = await this.store.loadSession(name);
-        if(!bundle) {
-          throw new Error(`未找到联系人 ${name} 的会话信息`)
+        if (msg.type === 3) {
+            plaintext = await cipher.decryptPreKeyWhisperMessage(base64ToString(msg.body!), "binary")
+        } else if (msg.type === 1) {
+            plaintext = await cipher.decryptWhisperMessage(base64ToString(msg.body!), "binary")
         }
-        const { identityKey, signedPreKey, preKey, registrationId } = bundle;
-        return new SignalProtocolSession(address, identityKey, signedPreKey, preKey, registrationId);
-      }
-  }
-    
+        const stringPlaintext = new TextDecoder().decode(new Uint8Array(plaintext))
+
+        return stringPlaintext
+    }
+}
+
 /**
- * 异步函数，用于创建身份信息
- * 
- * @returns {Promise<void>} 返回Promise对象，该对象在异步操作完成后解析为undefined
+ * ArrayBuffer 转 base64
+ * @param {ArrayBuffer} arr
+ * @returns {string}
  */
-export async function createIdentity() {}
+export function arrayBufferToBase64(arr: ArrayBuffer) {
+    let binary = ''
+    const bytes = new Uint8Array(arr)
+    const len = bytes.byteLength
+
+    for (let i = 0; i < len; i++) {
+        binary += String.fromCharCode(bytes[i])
+    }
+
+    return btoa(binary)
+}
+
+/**
+ * base64 转 ArrayBuffer
+ * @param str 
+ * @returns 
+ */
+export function base64ArrayBuffer(str: string) {
+    // 使用atob将Base64字符串转换为二进制字符串
+    const binaryString = atob(str)
+
+    // 创建一个Uint8Array视图
+    const uint8Array = new Uint8Array(binaryString.length)
+
+    // 将二进制字符串的每个字符转换为Uint8Array的元素
+    for (let i = 0; i < binaryString.length; i++) {
+        uint8Array[i] = binaryString.charCodeAt(i)
+    }
+
+    // 现在，uint8Array是包含解码后数据的Uint8Array
+    const buffer = uint8Array.buffer
+
+    return buffer
+}
+
+/**
+ * 把对象中的 ArrayBuffer 转 base64
+ * @returns {Promise<IdentityType>}
+ */
+export function toBase64(obj: any, isClone: boolean = true) {
+    const clone = isClone ? cloneDeep(obj) : obj
+    Object.keys(clone).forEach(async (key) => {
+        if (clone[key] instanceof ArrayBuffer) {
+            clone[key] = arrayBufferToBase64(clone[key])
+        }
+        if (typeof clone[key] === "object") {
+            toBase64(clone[key], false)
+        }
+    })
+    return clone
+}
+
+/**
+ * 把对象中的 base64 转 ArrayBuffer(33)
+ * @returns {Promise<ArrayBuffer>}
+ */
+export function toArrayBuffer(obj: any, isClone: boolean = true) {
+    const clone = isClone ? cloneDeep(obj) : obj
+    Object.keys(clone).forEach(async key => {
+        // 判断是否是 base64 字符
+        if (typeof clone[key] === "string") {
+            clone[key] = base64ArrayBuffer(clone[key])
+        }
+
+        if (typeof clone[key] === "object") {
+            toArrayBuffer(clone[key], false)
+        }
+    })
+
+    return clone
+}
+
+/**
+ * 字符串转 base 64
+ * @returns {Promise<ArrayBuffer>}
+ */
+export function stringToBase64(str: string) {
+    return arrayBufferToBase64(new TextEncoder().encode(str).buffer)
+}
+
+/**
+ * base64 转字符串
+ * @returns {Promise<ArrayBuffer>}
+ */
+export function base64ToString(str: string) {
+    return new TextDecoder().decode(base64ArrayBuffer(str))
+}

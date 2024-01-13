@@ -1,10 +1,12 @@
-import React from 'react';
-import { createRoot } from 'react-dom/client';
-import './index.css';
-import App from './TestApp';
-// import App from './AppTest';
+// import React from 'react';
+import { createRoot } from 'react-dom/client'
+import './index.css'
+// import App from './TestApp'
+import App from './App'
+// import App from './AppTest'
 
-import * as serviceWorker from './serviceWorker';
+
+// import * as serviceWorker from './serviceWorker';
 
 
 createRoot( document.getElementById('root')!).render(
