@@ -3,7 +3,7 @@ import './App.css'
 import React, { useEffect, useState } from 'react'
 // import { cloneDeep } from 'lodash-es'
 import {  SessionCipher, SignalProtocolAddress } from "@privacyresearch/libsignal-protocol-typescript"
-import Signal from "./protocol"
+import Signal from "./signal-protocol"
 
 
 const DESKTOP = 'test1'

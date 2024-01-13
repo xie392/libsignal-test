@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import './App.css'
 import { Button, TextField } from "@material-ui/core"
 
-import Signal from "./protocol"
+import Signal from "./signal-protocol"
 import { SessionCipher, SignalProtocolAddress } from '@privacyresearch/libsignal-protocol-typescript'
 
 import { cloneDeep } from 'lodash-es'
