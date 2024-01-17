@@ -134,6 +134,10 @@ export default class Signal {
 
 		return stringPlaintext
 	}
+
+	updateStore(store: SignalProtocolStore) {
+		this.store = store
+	}
 }
 
 /**
@@ -201,7 +205,7 @@ export function toArrayBuffer(obj: any, isClone: boolean = true) {
 	const clone = isClone ? cloneDeep(obj) : obj
 	Object.keys(clone).forEach(async (key) => {
 		// 判断是否是 base64 字符
-		if (typeof clone[key] === 'string') {
+		if (typeof clone[key] === 'string' && isBase64(clone[key])) {
 			clone[key] = base64ArrayBuffer(clone[key])
 		}
 
@@ -227,4 +231,10 @@ export function stringToBase64(str: string) {
  */
 export function base64ToString(str: string) {
 	return new TextDecoder().decode(base64ArrayBuffer(str))
+}
+
+function isBase64(str: string) {
+	// 使用正则表达式检查字符串是否符合Base64编码格式
+	const base64Regex = /^[A-Za-z0-9+/]+={0,2}$/
+	return base64Regex.test(str)
 }

@@ -2,12 +2,13 @@ import { useEffect, useState } from 'react'
 import './App.css'
 import { Button, TextField } from '@material-ui/core'
 
-import Signal from './signal-protocol'
+import Signal, { toBase64, toArrayBuffer } from './signal-protocol'
 import { SessionCipher, SignalProtocolAddress } from '@privacyresearch/libsignal-protocol-typescript'
 
 import { cloneDeep } from 'lodash-es'
 import MarkdownPreview from '@uiw/react-markdown-preview'
 import processMarkdown from './process.md?raw'
+import { SignalProtocolStore } from './storage-type'
 
 const DESKTOP1 = 'test1'
 const DESKTOP2 = 'test2'
@@ -26,8 +27,8 @@ function App() {
 	const [address2] = useState(new SignalProtocolAddress(DESKTOP2, 2))
 
 	// 会话 session
-	const [sessionCipher1] = useState<SessionCipher>(new SessionCipher(signal1.store, address2))
-	const [sessionCipher2] = useState<SessionCipher>(new SessionCipher(signal2.store, address2))
+	const [sessionCipher1, setSessionCipher1] = useState<SessionCipher>(new SessionCipher(signal1.store, address2))
+	const [sessionCipher2, setSessionCipher2] = useState<SessionCipher>(new SessionCipher(signal2.store, address1))
 
 	// 消息
 	const [msg1, setMsg1] = useState<string>('')
@@ -40,6 +41,32 @@ function App() {
 
 	// 初始化
 	async function init() {
+		// 判断本地是否已经有了会话
+		const sessionState1 = localStorage.getItem('sessionState1') as string
+		const sessionState2 = localStorage.getItem('sessionState2') as string
+		const desktopState1 = localStorage.getItem('desktop1') as string
+		const desktopState2 = localStorage.getItem('desktop2') as string
+
+		if (sessionState1) {
+			setDesktop1(JSON.parse(desktopState1))
+			setDesktop2(JSON.parse(desktopState2))
+
+			console.log("toArrayBuffer(JSON.parse(sessionState1)",toArrayBuffer(JSON.parse(sessionState1)));
+
+			const store1 = new SignalProtocolStore(toArrayBuffer(JSON.parse(sessionState1)))
+			const store2 = new SignalProtocolStore(toArrayBuffer(JSON.parse(sessionState2)))
+
+			signal1.updateStore(store1)
+			signal2.updateStore(store2)
+
+			const cipher1 = new SessionCipher(signal1.store, address2)
+			const cipher2 = new SessionCipher(signal2.store, address1)
+
+			setSessionCipher1(cipher1)
+			setSessionCipher2(cipher2)
+			return
+		}
+
 		const desktop1 = await signal1.ceeateIdentity(DESKTOP1)
 		const desktop2 = await signal2.ceeateIdentity(DESKTOP2)
 
@@ -61,6 +88,14 @@ function App() {
 		console.log('%c第二步:', 'color:#f36;font-size:24px;')
 		console.info('与客户端2建立会话')
 		console.info('与客户端1建立会话')
+
+		//* 持久化会话
+		localStorage.setItem('sessionState1', JSON.stringify(toBase64(signal1.store)))
+		localStorage.setItem('sessionState2', JSON.stringify(toBase64(signal2.store)))
+		localStorage.setItem('desktop1', JSON.stringify(toBase64(desktop1)))
+		localStorage.setItem('desktop2', JSON.stringify(toBase64(desktop2)))
+
+		console.log('持久化会话', toBase64(signal1.store), sessionCipher2)
 	}
 
 	useEffect(() => {
@@ -68,6 +103,8 @@ function App() {
 	}, [])
 
 	const sendMessage1 = async () => {
+		console.log('sessionCipher1', sessionCipher1)
+
 		const encrypted = await signal1.encrypt(msg1, sessionCipher1!)
 
 		console.log('客户端2发送消息：', encrypted)
@@ -120,9 +157,10 @@ function App() {
 	// 解密
 	useEffect(() => {
 		const decrypt = async () => {
+			console.log('chats', chats)
+
 			const newChats = cloneDeep(chats)
 			const lastChats = newChats.at(-1)
-
 			if (lastChats.type === 'send') {
 				lastChats.msg.body = await signal1.decrypt(lastChats.msg, sessionCipher2!)
 			} else {

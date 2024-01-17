@@ -65,8 +65,8 @@ type StoreValue = KeyPairType | string | number | KeyPairType | PreKeyType | Sig
 export class SignalProtocolStore implements StorageType {
 	private _store: Record<string, StoreValue>
 
-	constructor() {
-		this._store = {}
+	constructor(store?: { _store: Record<string, StoreValue> }) {
+		this._store = store ? store._store : {}
 	}
 
 	/**
