@@ -13,6 +13,14 @@ import { SignalProtocolStore } from './storage-type'
 const DESKTOP1 = 'test1'
 const DESKTOP2 = 'test2'
 
+/**
+ * 实现端对端加密你需要持久化以下信息
+ * 1、身份状态。客户端需要维护自己的身份密钥对以及从其他客户端收到的身份密钥的状态。
+ * 2预密钥状态。客户端需要维护其生成的 PreKey 的状态。
+ * 3、已签署 PreKey 状态。客户需要维护其签名的 PreKey 的状态。
+ * 4、会话状态。客户端需要维护他们已建立的会话的状态。
+ * @returns 
+ */
 function App() {
 	// 创建实例
 	const [signal1] = useState(new Signal())
@@ -35,9 +43,9 @@ function App() {
 	const [msg2, setMsg2] = useState<string>('')
 
 	// 加密的消息
-	const [message, setMessage] = useState<any>([])
+	const [message, setMessage] = useState<any>(JSON.parse(localStorage.getItem('message')! || '[]') || [])
 	// 解密后的消息
-	const [chats, setChats] = useState<any>([])
+	const [chats, setChats] = useState<any>(JSON.parse(localStorage.getItem('chats')! || '[]') || [])
 
 	// 初始化
 	async function init() {
@@ -51,7 +59,7 @@ function App() {
 			setDesktop1(JSON.parse(desktopState1))
 			setDesktop2(JSON.parse(desktopState2))
 
-			console.log("toArrayBuffer(JSON.parse(sessionState1)",toArrayBuffer(JSON.parse(sessionState1)));
+			console.log('toArrayBuffer(JSON.parse(sessionState1)', toArrayBuffer(JSON.parse(sessionState1)))
 
 			const store1 = new SignalProtocolStore(toArrayBuffer(JSON.parse(sessionState1)))
 			const store2 = new SignalProtocolStore(toArrayBuffer(JSON.parse(sessionState2)))
@@ -162,11 +170,15 @@ function App() {
 			const newChats = cloneDeep(chats)
 			const lastChats = newChats.at(-1)
 			if (lastChats.type === 'send') {
+				// 客户端1解密
+				// const sessionCipher = new SessionCipher(signal2.store, address1)
 				lastChats.msg.body = await signal1.decrypt(lastChats.msg, sessionCipher2!)
 			} else {
 				lastChats.msg.body = await signal2.decrypt(lastChats.msg, sessionCipher1!)
 			}
 			setChats(newChats)
+			localStorage.setItem('message', JSON.stringify(message))
+			localStorage.setItem('chats', JSON.stringify(newChats))
 		}
 		if (chats.length > 0) {
 			decrypt()
